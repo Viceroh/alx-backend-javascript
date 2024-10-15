@@ -4,11 +4,12 @@ const { expect } = require('chai');
 const sendPaymentRequestToApi = require('./3-payment');
 
 describe('sendPaymentRequestToApi', () => {
-  it('calls Utils.calculateNumber with SUM type and 100, 20 as arguments', () => {
-    const calculateNumberSpy = sinon.spy(Utils, 'calculateNumber');
+  it('sendPaymentRequestToApi uses the calculateNumber method of Utils', () => {
+    const bigBrother = sinon.spy(Utils);
+
     sendPaymentRequestToApi(100, 20);
-    expect(calculateNumberSpy.calculateNumber.calledWith('SUM', 100, 20)).to.be.true;
-    expect(calculateNumberSpy.calculateNumber.calledOnce).to.be.true;
-    calculateNumberSpy.calculateNumber.restore();
+    expect(bigBrother.calculateNumber.calledWith('SUM', 100, 20)).to.be.true;
+    expect(bigBrother.calculateNumber.callCount).to.be.equal(1);
+    bigBrother.calculateNumber.restore();
   });
 });
