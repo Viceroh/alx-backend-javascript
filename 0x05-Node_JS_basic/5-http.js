@@ -1,62 +1,118 @@
-const csvFile = process.argv[2];
 const http = require('http');
-
-const port = 1245;
 const fs = require('fs');
- 
-const countStud = function read(path) {
-  return new Promise((resolve, reject) => {
-    fs.readFile(path, 'utf-8', (err, data) => {
+
+const PORT = 1245;
+const HOST = 'localhost';
+const app = http.createServer();
+const DB_FILE = process.argv.length > 2 ? process.argv[2] : '';
+
+/**
+ * Counts the students in a CSV data file.
+ * @param {String} dataPath The path to the CSV data file.
+ * @author Bezaleel Olakunori <https://github.com/B3zaleel>
+ */
+const countStudents = (dataPath) => new Promise((resolve, reject) => {
+  if (!dataPath) {
+    reject(new Error('Cannot load the database'));
+  }
+  if (dataPath) {
+    fs.readFile(dataPath, (err, data) => {
       if (err) {
         reject(new Error('Cannot load the database'));
-        return;
       }
-     const myArray = data.split('\n');
-     const filterArray = myArray.filter((item) => item !== '');
-     filterArray.shift();
-     filterArray.forEach((value, index) => {
-     filterArray[index] = value.split(',');
-     });
-     const studentCs = [];
-     const studentSWE = [];
-     filterArray.forEach((value) => {
-       if (value.includes('CS')) {
-         studentCs.push(value.shift());
-       } else if (value.includes('SWE')) {
-         studentSWE.push(value.shift());
-       }
-     });
-     resolve([filterArray, studentCs, studentSWE]);
+      if (data) {
+        const reportParts = [];
+        const fileLines = data.toString('utf-8').trim().split('\n');
+        const studentGroups = {};
+        const dbFieldNames = fileLines[0].split(',');
+        const studentPropNames = dbFieldNames.slice(
+          0,
+          dbFieldNames.length - 1,
+        );
+
+        for (const line of fileLines.slice(1)) {
+          const studentRecord = line.split(',');
+          const studentPropValues = studentRecord.slice(
+            0,
+            studentRecord.length - 1,
+          );
+          const field = studentRecord[studentRecord.length - 1];
+          if (!Object.keys(studentGroups).includes(field)) {
+            studentGroups[field] = [];
+          }
+          const studentEntries = studentPropNames.map((propName, idx) => [
+            propName,
+            studentPropValues[idx],
+          ]);
+          studentGroups[field].push(Object.fromEntries(studentEntries));
+        }
+
+        const totalStudents = Object.values(studentGroups).reduce(
+          (pre, cur) => (pre || []).length + cur.length,
+        );
+        reportParts.push(`Number of students: ${totalStudents}`);
+        for (const [field, group] of Object.entries(studentGroups)) {
+          reportParts.push([
+            `Number of students in ${field}: ${group.length}.`,
+            'List:',
+            group.map((student) => student.firstname).join(', '),
+          ].join(' '));
+        }
+        resolve(reportParts.join('\n'));
+      }
     });
-  });
-};
-
-
-const app = http.createServer((req, res) => {
-  // deconstruct the request
-  const { url, method } = req;
-  // return plain text
-  res.writeHead(200, {
-    'Content-Type': 'text/plain',
-  });
-  // if url path is / displays ...
-  if (method === 'GET' && url === '/') {
-    res.end('Hello Holberton School!');
-  } else if (csvFile && url === '/students') {
-  // if url path is /students displays the content of csv file
-    countStud(csvFile)
-      .then((result) => {
-        const response = `This is the list of our students\nNumber of students: ${result[0].length}\nNumber of students in CS: ${result[1].length}. List: ${result[1].join(', ')}\nNumber of students in SWE: ${result[2].length}. List: ${result[2].join(', ')}`;
-        res.end(response);
-      })
-      .catch((error) => {
-        res.end(error.message);
-      });
-  } else if (!csvFile && url === '/students') {
-    res.end('This is the list of our students\nNumber of students: 10\nNumber of students in CS: 6. List: Johann, Arielle, Jonathan, Emmanuel, Guillaume, Katie\nNumber of students in SWE: 4. List: Guillaume, Joseph, Paul, Tommy');
   }
 });
 
-app.listen(port);
+const SERVER_ROUTE_HANDLERS = [
+  {
+    route: '/',
+    handler(_, res) {
+      const responseText = 'Hello Holberton School!';
+
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Length', responseText.length);
+      res.statusCode = 200;
+      res.write(Buffer.from(responseText));
+    },
+  },
+  {
+    route: '/students',
+    handler(_, res) {
+      const responseParts = ['This is the list of our students'];
+
+      countStudents(DB_FILE)
+        .then((report) => {
+          responseParts.push(report);
+          const responseText = responseParts.join('\n');
+          res.setHeader('Content-Type', 'text/plain');
+          res.setHeader('Content-Length', responseText.length);
+          res.statusCode = 200;
+          res.write(Buffer.from(responseText));
+        })
+        .catch((err) => {
+          responseParts.push(err instanceof Error ? err.message : err.toString());
+          const responseText = responseParts.join('\n');
+          res.setHeader('Content-Type', 'text/plain');
+          res.setHeader('Content-Length', responseText.length);
+          res.statusCode = 200;
+          res.write(Buffer.from(responseText));
+        });
+    },
+  },
+];
+
+app.on('request', (req, res) => {
+  for (const routeHandler of SERVER_ROUTE_HANDLERS) {
+    if (routeHandler.route === req.url) {
+      routeHandler.handler(req, res);
+      break;
+    }
+  }
+});
+
+app.listen(PORT, HOST, () => {
+  process.stdout.write(`Server listening at -> http://${HOST}:${PORT}\n`);
+});
 
 module.exports = app;
